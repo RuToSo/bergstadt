@@ -41,9 +41,25 @@ aside{background:var(--flaeche);border-left:1px solid var(--linie);display:flex;
 footer{font-size:.72rem;color:var(--leise);padding:.6rem 1rem;border-top:1px solid var(--linie)}
 footer a{color:inherit}
 :focus-visible{outline:2px solid var(--gelb);outline-offset:2px}
+#schnitt{position:absolute;right:10px;top:10px;z-index:2;display:flex;flex-direction:column;align-items:center;gap:6px}
+#schnitt button{font:inherit;font-size:.82rem;font-weight:700;background:color-mix(in srgb,var(--flaeche) 88%,transparent);color:var(--text);border:1px solid var(--linie);border-radius:4px;min-width:40px;min-height:36px;padding:.3rem .6rem;cursor:pointer}
+#schnittBtn[aria-pressed=true]{background:var(--blau);color:#fff;border-color:var(--blau)}
+.schnitt-regler{display:none;flex-direction:column;align-items:center;gap:6px;background:color-mix(in srgb,var(--flaeche) 88%,transparent);border:1px solid var(--linie);border-radius:6px;padding:6px}
+body.schnitt .schnitt-regler{display:flex}
+#schnittY{writing-mode:vertical-lr;direction:rtl;height:min(46dvh,360px);width:28px}
+#schnittWert{font-size:.8rem;font-weight:700}
+body.laufen #schnitt{display:none}
 .kopfknopf{font:inherit;font-weight:700;background:var(--gelb);color:#17222b;border:0;border-radius:.5rem;padding:.4rem .8rem;margin-left:auto;cursor:pointer}
 header a{margin-left:0}
-body.laufen .kopfknopf{background:#fff}
+body.laufen #schnitt{position:absolute;right:10px;top:10px;z-index:2;display:flex;flex-direction:column;align-items:center;gap:6px}
+#schnitt button{font:inherit;font-size:.82rem;font-weight:700;background:color-mix(in srgb,var(--flaeche) 88%,transparent);color:var(--text);border:1px solid var(--linie);border-radius:4px;min-width:40px;min-height:36px;padding:.3rem .6rem;cursor:pointer}
+#schnittBtn[aria-pressed=true]{background:var(--blau);color:#fff;border-color:var(--blau)}
+.schnitt-regler{display:none;flex-direction:column;align-items:center;gap:6px;background:color-mix(in srgb,var(--flaeche) 88%,transparent);border:1px solid var(--linie);border-radius:6px;padding:6px}
+body.schnitt .schnitt-regler{display:flex}
+#schnittY{writing-mode:vertical-lr;direction:rtl;height:min(46dvh,360px);width:28px}
+#schnittWert{font-size:.8rem;font-weight:700}
+body.laufen #schnitt{display:none}
+.kopfknopf{background:#fff}
 #meldung{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(20,26,32,.82);color:#fff;padding:.45rem .9rem;border-radius:.5rem;font-size:.9rem;z-index:4;max-width:90%;text-align:center}
 #fadenkreuz{display:none;position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none;z-index:3;
   background:linear-gradient(#fff,#fff) center/2px 100% no-repeat,linear-gradient(#fff,#fff) center/100% 2px no-repeat;mix-blend-mode:difference}
@@ -78,6 +94,8 @@ dialog#bau::backdrop{background:rgba(10,15,20,.35)}
 .kachel{width:20px;height:20px;flex:none;background-image:var(--atlas);background-size:var(--atlasW) auto;image-rendering:pixelated;border:1px solid rgba(0,0,0,.2)}
 @media (max-width:800px){
   .bau-inhalt{grid-template-columns:1fr}
+  #schnitt{top:auto;bottom:calc(14px + env(safe-area-inset-bottom,0px));right:10px}
+  #schnittY{height:34dvh}
   body{grid-template-columns:1fr}
   #panelBtn{display:inline-block}
   header a{display:none}
@@ -100,6 +118,15 @@ dialog#bau::backdrop{background:rgba(10,15,20,.35)}
 <main id="bühne">
   <canvas id="cv" aria-label="3D-Ansicht der Bergstadt"></canvas>
   <nav id="ebenen" aria-label="Ebenen"></nav>
+  <div id="schnitt">
+    <button type="button" id="schnittBtn" aria-pressed="false" title="Die Welt waagerecht aufschneiden">Schnitt</button>
+    <div class="schnitt-regler">
+      <button type="button" id="schnittAuf" aria-label="Eine Ebene höher">▲</button>
+      <input type="range" id="schnittY" aria-label="Schnitthöhe" orient="vertical">
+      <button type="button" id="schnittAb" aria-label="Eine Ebene tiefer">▼</button>
+      <span id="schnittWert"></span>
+    </div>
+  </div>
   <div id="lade" role="status">Lade …</div>
   <div id="meldung" role="status" hidden></div>
   <div id="fadenkreuz" aria-hidden="true"></div>
@@ -115,7 +142,7 @@ dialog#bau::backdrop{background:rgba(10,15,20,.35)}
   <div id="hilfe">Ziehen: drehen · Rechts/Umschalt: schieben · Rad: zoomen · Klick: Block ansehen bzw. Schalter benutzen</div>
 </main>
 <aside id="panel">
-  <div id="info"><h2>Willkommen</h2><p>Eine Bergstadt mit Burg, Markt und Krater – und tief im Fels ein Stargate Command über mehrere Ebenen. Wähle einen Ort aus der Liste oder eine Ebene links oben. Mit „Begehen“ läufst du selbst durch die Welt; Türen, Lampen und das Tor lassen sich schalten.</p></div>
+  <div id="info"><h2>Willkommen</h2><p>Eine Bergstadt mit Burg, Markt und Krater – und tief im Fels ein Stargate Command über mehrere Ebenen. Wähle einen Ort aus der Liste oder eine Ebene links oben. Mit „Schnitt“ schneidest du die Welt in jeder Höhe auf, mit „Begehen“ läufst du selbst durch die Welt; Türen, Lampen und das Tor lassen sich schalten.</p></div>
   <div id="suchzeile"><input id="suche" type="search" placeholder="Ort suchen …" aria-label="Ort suchen"></div>
   <div id="orte"></div>
   <footer>Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden. Alle Texturen sind eigene Nachbildungen. · <a href="https://rutoso.de">rutoso.de</a></footer>

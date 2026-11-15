@@ -120,6 +120,19 @@ const TEX = (() => {
   tile('crafting', framed(planks(0x9b6b36), 0x5a3b16, s => { for (let x = 3; x < 13; x++) s(x, 8, [70, 50, 30]); s(4, 4, [150, 150, 150]); s(11, 4, [150, 150, 150]); }));
   tile('candle', (s) => { for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const body = x >= 6 && x <= 9 && y >= 6; const flame = x >= 7 && x <= 8 && y >= 2 && y < 6; s(x, y, flame ? [255, 210, 90] : body ? [230, 220, 190] : [0, 0, 0], flame || body ? 255 : 0); } });
 
+
+  // Pflanzen und Einrichtung
+  const pflanze = (stiel, bluete) => (s) => { for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) s(x, y, [0, 0, 0], 0);
+    const st = hex(stiel); for (let y = 6; y < N; y++) { s(7, y, shade(st, 0.9 + rnd() * 0.2)); s(8, y, shade(st, 0.8)); } s(6, 10, st); s(5, 9, st); s(9, 12, st); s(10, 11, st);
+    if (bluete) { const b = hex(bluete); for (const [x, y] of [[7, 3], [8, 3], [6, 4], [7, 4], [8, 4], [9, 4], [7, 5], [8, 5], [6, 5], [9, 5]]) s(x, y, shade(b, 0.85 + rnd() * 0.25)); s(7, 4, [250, 220, 90]); } };
+  tile('tallgrass', (s) => { for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) s(x, y, [0, 0, 0], 0);
+    for (let k = 0; k < 9; k++) { const x = 1 + Math.floor(rnd() * 14), h = 5 + Math.floor(rnd() * 10); for (let y = N - 1; y > N - 1 - h; y--) s(x + (y % 3 === 0 && rnd() < 0.4 ? 1 : 0), y, shade([92, 150, 60], 0.75 + rnd() * 0.4)); } });
+  tile('flower_red', pflanze(0x3f7a2a, 0xd8312b)); tile('flower_yellow', pflanze(0x3f7a2a, 0xf1d22c)); tile('flower_blue', pflanze(0x3f7a2a, 0x3f78d8));
+  tile('barrel_side', (s) => { planks(0x7a5530)(s); for (let x = 0; x < N; x++) { s(x, 2, [70, 70, 75]); s(x, 13, [70, 70, 75]); } });
+  tile('barrel_top', framed(planks(0x7a5530), 0x4a321c, (s) => { for (let y = 5; y < 11; y++) for (let x = 5; x < 11; x++) s(x, y, [60, 42, 24]); }));
+  tile('bed_top', (s) => { wool(0xa12722)(s); for (let y = 0; y < 5; y++) for (let x = 1; x < 15; x++) s(x, y, shade([235, 235, 230], 0.92 + rnd() * 0.08)); });
+  tile('pot', (s) => { noise(0x8a4a2e, 1)(s); for (let x = 0; x < N; x++) s(x, 0, [110, 60, 38]); });
+
   // Block -> [oben, Seite, unten]
   const B = {
     stb: 'stone_bricks', cob: 'cobble', mcb: 'mossy_cobble', dsb: 'deepslate_bricks', dst: 'deepslate_tiles', csb: 'chiseled',
@@ -129,7 +142,8 @@ const TEX = (() => {
     rwl: 'wool_red', wwl: 'wool_white', ywl: 'wool_yellow', bwl: 'wool_blue', bks: 'blackstone', pbb: 'blackstone_bricks', bas: ['basalt_top', 'basalt_side', 'basalt_top'],
     bsh: ['spruce_planks', 'bookshelf', 'spruce_planks'], gld: 'gold_block', lea: 'leaves', ibr: 'iron_bars', ido: 'iron_door', spi: ['piston_top', 'piston_side', 'stone'],
     red: 'redstone', dis: ['stone', 'dispenser', 'stone'], sos: 'soul_sand', qtz: 'quartz', che: 'chest', hop: 'hopper', frm: ['farmland', 'wheat', 'dirt'], bam: 'bamboo',
-    fen: 'fence', hay: ['hay_top', 'hay_side', 'hay_top'], crf: 'crafting', cdl: 'candle', drt: 'dirt', snw: 'snow',
+    fen: 'spruce_planks', hay: ['hay_top', 'hay_side', 'hay_top'], crf: 'crafting', cdl: 'candle', drt: 'dirt', snw: 'snow',
+    bet: ['bed_top', 'spruce_planks', 'spruce_planks'], tsk: 'spruce_planks', stu: 'spruce_planks', fas: ['barrel_top', 'barrel_side', 'barrel_top'], tep: 'wool_red', blu: ['dirt', 'pot', 'pot'],
   };
   // Geländeoberflächen (T-Index der Daten) -> [oben, Seite oberster Block, darunter]
   const SURF = [
@@ -138,8 +152,10 @@ const TEX = (() => {
     ['basalt_top', 'basalt_side', 'stone'], ['blackstone', 'blackstone', 'stone'], ['grass_top', 'grass_side', 'dirt'], ['dirt', 'dirt', 'dirt'],
   ];
   // Blöcke mit Ausschnitten (Alpha-Test statt Transparenz)
-  const CUTOUT = new Set(['lea', 'ibr', 'frm', 'bam', 'fen', 'cdl']);
+  const CUTOUT = new Set(['lea']);
 
+  // Nicht-volle Blöcke: Form + Zusatzkacheln
+  const SHAPE = { fen: 'zaun', lan: 'laterne', cdl: 'kerze', ibr: 'gitter', frm: 'feld', bam: 'stange', bet: 'bett', tsk: 'tisch', stu: 'stuhl', tep: 'teppich', blu: 'topf' };
   function atlas() {
     const rows = Math.ceil(tiles.length / COLS);
     const cv = document.createElement('canvas'); cv.width = COLS * N; cv.height = rows * N;
@@ -149,5 +165,5 @@ const TEX = (() => {
   }
   const id = n => idx[n] ?? idx.stone;
   const faces = k => { const v = B[k] || 'stone'; return Array.isArray(v) ? v.map(id) : [id(v), id(v), id(v)]; };
-  return { atlas, faces, surf: SURF.map(a => a.map(id)), cutout: CUTOUT, id };
+  return { atlas, faces, surf: SURF.map(a => a.map(id)), cutout: CUTOUT, id, shape: SHAPE };
 })();

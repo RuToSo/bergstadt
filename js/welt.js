@@ -36,8 +36,16 @@
   const regKey = (x, z) => Math.floor(x / R) + ',' + Math.floor(z / R);
   function setB(x, y, z, t) { const c = CH.get((x >> 4) + ',' + (y >> 4) + ',' + (z >> 4)); if (!c) return false; c.b[((y & 15) << 8) | ((z & 15) << 4) | (x & 15)] = t; return true; }
   // Untertage-Bereiche (Räume, Tunnel, Schacht): dort ist das Gelände nicht massiv
-  const HOHL = META.poi.filter(p => [5, 6, 7].includes(p.zo) && p.y1 > p.y0);
-  const NICHT_FEST = new Set(['wat', 'lav', 'ptl', 'red', 'cdl']);
+  // Pro Spalte: unterster und oberster Block der Untertage-Bauten (Tunnel, Schacht, SGC) unterhalb der Oberfläche.
+  // Dazwischen ist der Fels hohl – so passen Räume, Gänge und der Fallschacht genau.
+  const UGLO = new Int16Array(W * D).fill(32767), UGHI = new Int16Array(W * D).fill(-32768);
+  for (const c of CH.values()) for (let i = 0; i < 4096; i++) {
+    if (!c.b[i] || ![5, 6, 7].includes(c.z[i])) continue;
+    const x = c.cx * 16 + (i & 15), z = c.cz * 16 + ((i >> 4) & 15), y = c.cy * 16 + (i >> 8);
+    if (x < 0 || z < 0 || x >= W || z >= D) continue; const j = z * W + x; if (y > H[j] + 1) continue;
+    if (y < UGLO[j]) UGLO[j] = y; if (y > UGHI[j]) UGHI[j] = y;
+  }
+  const NICHT_FEST = new Set(['wat', 'lav', 'ptl', 'red', 'cdl', 'tep', 'blu', 'lan']);
 
   // ---------- Texturen & Material ----------
   const AT = TEX.atlas();
@@ -91,6 +99,40 @@
   const KIND = PAL.map(p => TEX.cutout.has(p.k) ? 1 : (p.t ? 2 : 0));
   const LIGHT = PAL.map(p => p.e);
   const SURF = TEX.surf.slice(); SURF.water = TEX.id('water');
+  // ---------- Formen (Zäune, Laternen, Möbel, Pflanzen) ----------
+  const SHP = PAL.map(p => TEX.shape[p.k] || null);
+  const tid = n => TEX.id(n);
+  const voll = t => t && !SHP[t] && KIND[t] === 0;
+  function zeichneForm(t, x, y, z, ob, cb, get) {
+    const f = FACE[t], lit = LIGHT[t], sh = SHP[t], B = MESH.box, n = 1 / 16;
+    const verb = (dx, dz) => { const u = get(x + dx, y, z + dz); return u === t || voll(u); };
+    switch (sh) {
+      case 'zaun': { B(ob, x + 6 * n, y, z + 6 * n, x + 10 * n, y + 1, z + 10 * n, f, lit);
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (verb(dx, dz)) for (const yy of [6, 12]) {
+          const a = dx ? (dx > 0 ? [x + 10 * n, x + 1] : [x, x + 6 * n]) : [x + 7 * n, x + 9 * n], c = dz ? (dz > 0 ? [z + 10 * n, z + 1] : [z, z + 6 * n]) : [z + 7 * n, z + 9 * n];
+          B(ob, a[0], y + yy * n, c[0], a[1], y + (yy + 3) * n, c[1], f, lit); } break; }
+      case 'laterne': { const hang = voll(get(x, y + 1, z)) && !voll(get(x, y - 1, z));
+        const y0 = hang ? y + 6 * n : y; B(ob, x + 5 * n, y0, z + 5 * n, x + 11 * n, y0 + 7 * n, z + 11 * n, f, true);
+        B(ob, x + 6 * n, y0 + 7 * n, z + 6 * n, x + 10 * n, y0 + 9 * n, z + 10 * n, [tid('iron_block'), tid('iron_block'), tid('iron_block')], false);
+        if (hang) B(ob, x + 7.5 * n, y0 + 9 * n, z + 7.5 * n, x + 8.5 * n, y + 1, z + 8.5 * n, [tid('hopper'), tid('hopper'), tid('hopper')], false); break; }
+      case 'kerze': B(ob, x + 7 * n, y, z + 7 * n, x + 9 * n, y + 6 * n, z + 9 * n, [tid('wool_white'), tid('wool_white'), tid('wool_white')], false);
+        B(ob, x + 7.5 * n, y + 6 * n, z + 7.5 * n, x + 8.5 * n, y + 8 * n, z + 8.5 * n, [tid('glowstone'), tid('glowstone'), tid('glowstone')], true); break;
+      case 'gitter': { const ix = verb(1, 0) || verb(-1, 0), iz = verb(0, 1) || verb(0, -1); const g = [f[1], f[1], f[1]];
+        if (ix || !iz) MESH.quad(cb, [[x, y, z + .5], [x, y + 1, z + .5], [x + 1, y + 1, z + .5], [x + 1, y, z + .5]], [[0, 1], [0, 0], [1, 0], [1, 1]], f[1], 0.8);
+        if (iz) MESH.quad(cb, [[x + .5, y, z], [x + .5, y + 1, z], [x + .5, y + 1, z + 1], [x + .5, y, z + 1]], [[0, 1], [0, 0], [1, 0], [1, 1]], f[1], 0.8); break; }
+      case 'feld': B(ob, x, y, z, x + 1, y + 15 * n, z + 1, [tid('farmland'), tid('dirt'), tid('dirt')], false);
+        MESH.cross(cb, x, y + 15 * n, z, tid('wheat'), 0.9, 0.9); break;
+      case 'stange': B(ob, x + 6.5 * n, y, z + 6.5 * n, x + 9.5 * n, y + 1, z + 9.5 * n, [tid('bamboo'), tid('bamboo'), tid('bamboo')], false); break;
+      case 'bett': B(ob, x, y + 3 * n, z, x + 1, y + 9 * n, z + 1, f, false); for (const [a, c] of [[0, 0], [13, 0], [0, 13], [13, 13]]) B(ob, x + a * n, y, z + c * n, x + (a + 3) * n, y + 3 * n, z + (c + 3) * n, [f[1], f[1], f[1]], false); break;
+      case 'tisch': B(ob, x, y + 14 * n, z, x + 1, y + 1, z + 1, f, false); B(ob, x + 6.5 * n, y, z + 6.5 * n, x + 9.5 * n, y + 14 * n, z + 9.5 * n, f, false); break;
+      case 'stuhl': B(ob, x + 3 * n, y + 7 * n, z + 3 * n, x + 13 * n, y + 9 * n, z + 13 * n, f, false);
+        for (const [a, c] of [[3, 3], [11, 3], [3, 11], [11, 11]]) B(ob, x + a * n, y, z + c * n, x + (a + 2) * n, y + 7 * n, z + (c + 2) * n, f, false);
+        B(ob, x + 3 * n, y + 9 * n, z + 3 * n, x + 13 * n, y + 17 * n, z + 5 * n, f, false); break;
+      case 'teppich': B(ob, x, y, z, x + 1, y + n, z + 1, f, false); break;
+      case 'topf': B(ob, x + 5 * n, y, z + 5 * n, x + 11 * n, y + 6 * n, z + 11 * n, f, false);
+        MESH.cross(cb, x, y + 5 * n, z, tid(['flower_red', 'flower_yellow', 'flower_blue'][(x * 7 + z * 3) % 3]), 0.8, 0.7); break;
+    }
+  }
   const STONE = TEX.id('stone');
 
   function toMesh(b, m) {
@@ -142,6 +184,14 @@
     const m = MESH.terrain(W, D, H, S, WT, SURF, STONE, ix * R, iz * R, R, WASSER_Y);
     const grp = new THREE.Group();
     if (m.b.n) grp.add(toMesh(m.b, MAT[0]));
+    // Gras und Blumen auf Wiesen (fest pro Spalte, damit es beim Nachladen gleich aussieht)
+    const pb = MESH.buf(), GRAS = tid('tallgrass'), BL = [tid('flower_red'), tid('flower_yellow'), tid('flower_blue')];
+    for (let z = iz * R; z < Math.min(D, iz * R + R); z++) for (let x = ix * R; x < Math.min(W, ix * R + R); x++) {
+      const j = z * W + x; if (WT[j] || !(S[j] === 0 || S[j] === 11)) continue; const h = H[j]; if (get(x, h + 1, z) || get(x, h, z)) continue;
+      let r = ((x * 73856093) ^ (z * 19349663)) >>> 0; r = (r ^ (r >>> 13)) * 1274126177 >>> 0; const v = (r % 1000) / 1000;
+      if (v < 0.16) MESH.cross(pb, x, h + 1, z, GRAS, 0.6 + (r % 7) / 20, 0.9); else if (v < 0.185) MESH.cross(pb, x, h + 1, z, BL[r % 3], 0.8, 0.7);
+    }
+    if (pb.n) grp.add(toMesh(pb, MAT[1]));
     if (m.wb.n) { const w = toMesh(m.wb, MAT[2]); w.renderOrder = 3; grp.add(w); }
     regNear.set(k, grp); groups.terrainNear.add(grp); regFar.get(k).visible = false;
   }
@@ -157,7 +207,7 @@
   function buildVox(rk) {
     for (const m of regMeshes.get(rk) || []) { m.parent && m.parent.remove(m); m.geometry.dispose(); }
     const list = REG.get(rk) || [], ms = [];
-    const out = MESH.voxels(list, get, t => FACE[t], t => KIND[t], z => LAYER_OF[z] || 0, t => LIGHT[t]);
+    const out = MESH.voxels(list, get, t => FACE[t], t => KIND[t], z => LAYER_OF[z] || 0, t => LIGHT[t], t => SHP[t], zeichneForm);
     for (const [key, b] of out) { if (!b.n) continue; const lay = Math.floor(key / 3), kt = key % 3;
       const m = toMesh(b, MAT[kt]); if (kt === 2) m.renderOrder = 2; groups[LAYN[lay]].add(m); ms.push(m); }
     regMeshes.set(rk, ms);
@@ -221,6 +271,7 @@
   const lv = {}; for (const p of POI) if (p.zo === 6 && p.l) { lv[p.l] = Math.min(lv[p.l] ?? 9999, p.y0); }
   const LEVELS = Object.keys(lv).map(Number).sort((a, b) => a - b).map(n => ({ n, y: lv[n] }));
   function setLevel(n) {
+    if (n != null && typeof schnitt !== 'undefined' && schnitt.an) schnittSetzen(false);
     levelOn = n != null;
     groups.terrainFar.visible = groups.terrainNear.visible = groups.water.visible = groups.surf.visible = !levelOn;
     scene.background = levelOn ? DUNKEL_E : FOG; for (const m of allMats()) m.uniforms.fogColor.value = levelOn ? DUNKEL_E : FOG;
@@ -272,7 +323,7 @@
   // Etappe 2–4: Kollision, Mechanik, Begehen, Bauanleitung
   // =====================================================================
   const FEST = PAL.map(p => !NICHT_FEST.has(p.k));
-  const inHohl = (x, y, z) => { for (const p of HOHL) if (x >= p.x0 - 1 && x <= p.x1 + 1 && z >= p.z0 - 1 && z <= p.z1 + 1 && y >= p.y0 - 1 && y <= p.y1 + 2) return true; return false; };
+  const inHohl = (x, y, z) => { if (x < 0 || z < 0 || x >= W || z >= D) return false; const j = z * W + x; return y > UGLO[j] && y <= Math.max(UGHI[j], UGLO[j] + 3); };
   function solid(x, y, z) {
     const t = get(x, y, z); if (t) return FEST[t];
     if (x < 0 || z < 0 || x >= W || z >= D) return false;
@@ -361,6 +412,7 @@
     return false;
   }
   function startWalk() {
+    if (schnitt.an) schnittSetzen(false);
     walk.on = true; document.body.classList.add('laufen'); $('#laufBtn').textContent = 'Beenden'; if (mark) mark.visible = false;
     let x = cam.tx, z = cam.tz, y;
     if (levelOn) { y = cam.ty; } else { const ix = Math.max(0, Math.min(W - 1, Math.floor(x))), iz = Math.max(0, Math.min(D - 1, Math.floor(z))); y = H[iz * W + ix] + 1; }
@@ -400,8 +452,9 @@
   cv.addEventListener('pointerdown', e => { if (walk.on && touch && lookId === null) { lookId = e.pointerId; lookP = [e.clientX, e.clientY]; } });
   cv.addEventListener('pointermove', e => { if (e.pointerId !== lookId) return; walk.yaw -= (e.clientX - lookP[0]) * 0.006; walk.pitch = Math.max(-1.5, Math.min(1.5, walk.pitch - (e.clientY - lookP[1]) * 0.006)); lookP = [e.clientX, e.clientY]; });
   const lookAus = e => { if (e.pointerId === lookId) lookId = null; }; cv.addEventListener('pointerup', lookAus); cv.addEventListener('pointercancel', lookAus);
-  $('#tSpring').addEventListener('pointerdown', () => { if (walk.fly) walk.vy = 6; else if (walk.ground) walk.vy = 8.4; });
-  $('#tSpring').addEventListener('pointerup', () => { if (walk.fly) walk.vy = 0; });
+  $('#tSpring').addEventListener('pointerdown', () => { walk.springTouch = true; if (walk.fly) walk.vy = 6; });
+  const springAus = () => { walk.springTouch = false; if (walk.fly) walk.vy = 0; };
+  $('#tSpring').addEventListener('pointerup', springAus); $('#tSpring').addEventListener('pointercancel', springAus);
   $('#tNutz').addEventListener('click', () => meldung(benutzen(blickZiel())));
   $('#tFlieg').addEventListener('click', () => { walk.fly = !walk.fly; walk.vy = 0; $('#tFlieg').setAttribute('aria-pressed', String(walk.fly)); });
   $('#tEnde').addEventListener('click', stopWalk);
@@ -413,7 +466,12 @@
     let mx = (-sy * f + cy * s), mz = (-cy * f - sy * s); const l = Math.hypot(mx, mz); if (l > 1) { mx /= l; mz /= l; }
     mx *= speed * dt; mz *= speed * dt;
     if (walk.fly) { if (!touch) walk.vy = (k.Space ? 8 : 0) - (k.ControlLeft || k.KeyC ? 8 : 0); }
-    else { if (k.Space && walk.ground) walk.vy = 8.4; walk.vy = Math.max(-40, walk.vy - 28 * dt); }
+    else {
+      const nass = get(Math.floor(walk.x), Math.floor(walk.y + 0.4), Math.floor(walk.z)) === T.wat || get(Math.floor(walk.x), Math.floor(walk.y + 1.2), Math.floor(walk.z)) === T.wat
+        || (WT[Math.max(0, Math.min(D - 1, Math.floor(walk.z))) * W + Math.max(0, Math.min(W - 1, Math.floor(walk.x)))] && walk.y < 63);
+      if (nass) { walk.vy = Math.max(-3, walk.vy - 6 * dt); if (k.Space || walk.springTouch) walk.vy = 3.2; }
+      else { if ((k.Space || walk.springTouch) && walk.ground) walk.vy = 8.4; walk.vy = Math.max(-40, walk.vy - 28 * dt); }
+    }
     // Achsenweise bewegen, eine Stufe automatisch hochsteigen
     const tryMove = (nx, ny, nz) => { if (!kollidiert(nx, ny, nz)) { walk.x = nx; walk.y = ny; walk.z = nz; return true; } return false; };
     for (const [dx, dz] of [[mx, 0], [0, mz]]) { if (!dx && !dz) continue;
@@ -473,6 +531,33 @@
   document.documentElement.style.setProperty('--atlasW', AT.canvas.width * 1.25 + 'px');
   $('#info').addEventListener('click', e => { if (e.target.closest('#bauBtn')) bauOeffnen(aktiv); });
   let aktiv = null;
+
+  // ---------- Schnitt durch die Welt (Höhenregler) ----------
+  const schnitt = { an: false, y: 140, mesh: null, t: 0 };
+  const sRegler = $('#schnittY'), sWert = $('#schnittWert');
+  let yMin = 9999, yMax = -9999; for (let i = 0; i < W * D; i++) { yMin = Math.min(yMin, H[i], UGLO[i] < 32767 ? UGLO[i] : 9999); yMax = Math.max(yMax, H[i]); }
+  for (const c of CH.values()) yMax = Math.max(yMax, c.cy * 16 + 15);
+  sRegler.min = yMin - 1; sRegler.max = yMax + 1; sRegler.value = schnitt.y;
+  function schnittFlaeche() { // Felsquerschnitt auf Höhe y (graue Fläche dort, wo massives Gestein ist)
+    if (schnitt.mesh) { scene.remove(schnitt.mesh); schnitt.mesh.geometry.dispose(); schnitt.mesh = null; }
+    if (!schnitt.an) return;
+    const y = schnitt.y, b = MESH.buf(), mask = new Int32Array(W * D), stein = TEX.id(y < 0 ? 'deepslate_tiles' : 'stone') + 1;
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) { const j = z * W + x; if (H[j] > y && !inHohl(x, y, z) && !get(x, y, z)) mask[j] = stein; }
+    MESH.greedy(mask, W, D, (x, z, ww, dd, v) => MESH.quad(b, [[x, y + 1, z + dd], [x + ww, y + 1, z + dd], [x + ww, y + 1, z], [x, y + 1, z]], [[x, z + dd], [x + ww, z + dd], [x + ww, z], [x, z]], v - 1, 0.72));
+    if (b.n) { schnitt.mesh = toMesh(b, MAT[0]); schnitt.mesh.renderOrder = 1; scene.add(schnitt.mesh); }
+  }
+  function schnittSetzen(an, y) {
+    schnitt.an = an; if (y != null) schnitt.y = y;
+    if (an && levelOn) setLevel(null);
+    for (const m of allMats()) m.uniforms.cutHi.value = an ? schnitt.y + 1.02 : 9999;
+    sWert.textContent = an ? 'Y ' + schnitt.y : '';
+    $('#schnittBtn').setAttribute('aria-pressed', String(an)); document.body.classList.toggle('schnitt', an);
+    clearTimeout(schnitt.t); schnitt.t = setTimeout(schnittFlaeche, an ? 90 : 0);
+  }
+  $('#schnittBtn').addEventListener('click', () => { schnittSetzen(!schnitt.an, Math.max(+sRegler.min, Math.min(+sRegler.max, Math.round(cam.ty)))); sRegler.value = schnitt.y; });
+  sRegler.addEventListener('input', () => schnittSetzen(true, +sRegler.value));
+  $('#schnittAuf').addEventListener('click', () => { sRegler.value = +sRegler.value + 1; schnittSetzen(true, +sRegler.value); });
+  $('#schnittAb').addEventListener('click', () => { sRegler.value = +sRegler.value - 1; schnittSetzen(true, +sRegler.value); });
 
   // ---------- Schleife ----------
   status('');

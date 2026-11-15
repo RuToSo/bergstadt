@@ -19,6 +19,22 @@ const MESH = (() => {
     }
   }
   const SH = { top: 1, bottom: 0.5, x: 0.8, z: 0.66 };
+  // Quader innerhalb eines Blocks (Koordinaten absolut), tiles [oben, seite, unten]
+  function box(b, x0, y0, z0, x1, y1, z1, tl, lit) {
+    const L = v => lit ? 1.35 : v;
+    quad(b, [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [[x0, z1], [x1, z1], [x1, z0], [x0, z0]], tl[0], L(SH.top));
+    quad(b, [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], tl[2], L(SH.bottom));
+    quad(b, [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], [[z0, -y0], [z0, -y1], [z1, -y1], [z1, -y0]], tl[1], L(SH.x));
+    quad(b, [[x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0]], [[-z1, -y0], [-z1, -y1], [-z0, -y1], [-z0, -y0]], tl[1], L(SH.x));
+    quad(b, [[x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [x0, y0, z1]], [[-x1, -y0], [-x1, -y1], [-x0, -y1], [-x0, -y0]], tl[1], L(SH.z));
+    quad(b, [[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]], [[x0, -y0], [x0, -y1], [x1, -y1], [x1, -y0]], tl[1], L(SH.z));
+  }
+  // Zwei diagonale Flächen (Pflanzen); Material ist beidseitig
+  function cross(b, x, y, z, tile, h = 1, s = 1) {
+    const a = (1 - s) / 2, c = 1 - a;
+    quad(b, [[x + a, y, z + a], [x + a, y + h, z + a], [x + c, y + h, z + c], [x + c, y, z + c]], [[0, 1], [0, 1 - h], [1, 1 - h], [1, 1]], tile, 0.9);
+    quad(b, [[x + a, y, z + c], [x + a, y + h, z + c], [x + c, y + h, z + a], [x + c, y, z + a]], [[0, 1], [0, 1 - h], [1, 1 - h], [1, 1]], tile, 0.9);
+  }
 
   // ---------- Gelände ----------
   function terrain(W, D, H, S, WT, SURF, STONE, rx, rz, R, waterY) {
@@ -74,7 +90,7 @@ const MESH = (() => {
   // ---------- Bauwerke ----------
   // chunks: Liste {cx,cy,cz,b,z}; get(x,y,z) liefert Blocktyp weltweit; FACE(t) -> [oben,seite,unten]; kind(t): 0 deckend, 1 Ausschnitt, 2 durchsichtig
   // layerOf(zone) -> Ebene; light(t) -> true bei Leuchtblöcken
-  function voxels(chunks, get, FACE, kind, layerOf, light) {
+  function voxels(chunks, get, FACE, kind, layerOf, light, shape, drawShape) {
     const out = new Map(); // Schlüssel ebene*3+art -> buf
     const B = k => out.get(k) || (out.set(k, buf()), out.get(k));
     const DIRS = [
@@ -84,6 +100,8 @@ const MESH = (() => {
     const mask = new Int32Array(256);
     for (const c of chunks) {
       const bx = c.cx * 16, by = c.cy * 16, bz = c.cz * 16;
+      if (shape) for (let i = 0; i < 4096; i++) { const t = c.b[i]; if (!t || !shape(t)) continue;
+        const lay = layerOf(c.z[i]); drawShape(t, bx + (i & 15), by + (i >> 8), bz + ((i >> 4) & 15), B(lay * 3), B(lay * 3 + 1), get); }
       const at = (x, y, z) => (x >= 0 && x < 16 && y >= 0 && y < 16 && z >= 0 && z < 16) ? c.b[(y << 8) | (z << 4) | x] : get(bx + x, by + y, bz + z);
       DIRS.forEach(({ d, sh, f }) => {
         const axis = d[0] ? 0 : d[1] ? 1 : 2; // Scheiben senkrecht zur Achse
@@ -92,9 +110,9 @@ const MESH = (() => {
           for (let v = 0; v < 16; v++) for (let u = 0; u < 16; u++) {
             // Achse 0: u=z, v=y · Achse 1: u=x, v=z · Achse 2: u=x, v=y
             const xx = axis === 0 ? s : u, yy = axis === 1 ? s : v, zz = axis === 2 ? s : (axis === 0 ? u : v);
-            const i = (yy << 8) | (zz << 4) | xx, t = c.b[i]; if (!t) continue;
+            const i = (yy << 8) | (zz << 4) | xx, t = c.b[i]; if (!t || (shape && shape(t))) continue;
             const nb = at(xx + d[0], yy + d[1], zz + d[2]);
-            if (nb && (nb === t || kind(nb) === 0)) continue; // verdeckt
+            if (nb && !(shape && shape(nb)) && (nb === t || kind(nb) === 0)) continue; // verdeckt
             const lay = layerOf(c.z[i]);
             mask[v * 16 + u] = ((FACE(t)[f] * 4 + lay) * 4 + kind(t)) * 2 + (light(t) ? 1 : 0) + 1; any = true;
           }
@@ -122,6 +140,6 @@ const MESH = (() => {
     }
     return out;
   }
-  return { buf, quad, greedy, terrain, voxels };
+  return { buf, quad, greedy, terrain, voxels, box, cross };
 })();
 if (typeof module !== 'undefined') module.exports = MESH;
