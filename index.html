@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bergstadt &amp; Stargate Command – RuToSo</title>
+<meta name="description" content="Eine Bergstadt mit Burg, Krater und einem Stargate Command tief im Fels – zum Ansehen im Browser.">
+<link rel="icon" href="https://rutoso.de/favicon.ico" sizes="any">
+<style>
+:root{--grund:#eef1f3;--flaeche:#f8fafb;--text:#17222b;--leise:#566570;--linie:#c9d2d8;--blau:#1C5DA6;--gelb:#F5C330;color-scheme:light;
+  font-family:"Segoe UI",system-ui,Roboto,Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root{--grund:#11181d;--flaeche:#162027;--text:#e3e9ed;--leise:#93a4af;--linie:#2a3943;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--grund);color:var(--text);display:grid;grid-template-columns:1fr 340px;grid-template-rows:auto 1fr;height:100dvh;overflow:hidden}
+header{grid-column:1/-1;display:flex;align-items:center;gap:.8rem;padding:.55rem 1rem;padding-top:calc(.55rem + env(safe-area-inset-top,0px));background:var(--blau);color:#fff;border-bottom:4px solid var(--gelb)}
+header h1{margin:0;font-size:1.05rem;font-weight:700}
+header a{color:#fff;opacity:.85;font-size:.85rem;margin-left:auto}
+#panelBtn{display:none;font:inherit;background:var(--gelb);color:#17222b;border:0;border-radius:.5rem;padding:.4rem .8rem;font-weight:700}
+#bühne{position:relative;min-width:0;min-height:0}
+#cv{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#ebenen{position:absolute;left:10px;top:10px;display:flex;flex-direction:column;gap:4px;z-index:2}
+#ebenen button{font:inherit;font-size:.82rem;font-weight:600;text-align:left;background:color-mix(in srgb,var(--flaeche) 88%,transparent);color:var(--text);border:1px solid var(--linie);border-left:4px solid var(--linie);border-radius:4px;padding:.35rem .6rem;min-height:36px;cursor:pointer;backdrop-filter:blur(6px)}
+#ebenen button[aria-pressed=true]{border-left-color:var(--gelb);background:var(--blau);color:#fff}
+[hidden]{display:none!important}
+#lade{position:absolute;inset:0;display:grid;place-items:center;background:var(--grund);font-weight:600;z-index:5}
+#hilfe{position:absolute;right:10px;bottom:10px;font-size:.78rem;color:var(--leise);background:color-mix(in srgb,var(--flaeche) 80%,transparent);padding:.3rem .6rem;border-radius:4px;pointer-events:none}
+aside{background:var(--flaeche);border-left:1px solid var(--linie);display:flex;flex-direction:column;min-height:0}
+#info{padding:.9rem 1rem;border-bottom:1px solid var(--linie)}
+#info h2{margin:0 0 .3rem;font-size:1.05rem}
+#info p{margin:0;color:var(--leise);font-size:.9rem;line-height:1.45}
+#suchzeile{padding:.6rem 1rem}
+#suche{width:100%;font:inherit;padding:.5rem .7rem;border:1px solid var(--linie);border-radius:.5rem;background:var(--grund);color:var(--text)}
+#orte{overflow:auto;padding:0 .6rem 1rem}
+#orte h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--leise);margin:1rem .4rem .3rem}
+#orte ul{list-style:none;margin:0;padding:0}
+#orte button{width:100%;text-align:left;font:inherit;font-size:.9rem;background:none;border:0;color:var(--text);padding:.45rem .5rem;border-radius:.4rem;cursor:pointer;min-height:40px}
+#orte button:hover,#orte button:focus-visible{background:var(--grund)}
+.lv{font-size:.75rem;color:var(--leise)}
+.leise{color:var(--leise)}
+footer{font-size:.72rem;color:var(--leise);padding:.6rem 1rem;border-top:1px solid var(--linie)}
+footer a{color:inherit}
+:focus-visible{outline:2px solid var(--gelb);outline-offset:2px}
+.kopfknopf{font:inherit;font-weight:700;background:var(--gelb);color:#17222b;border:0;border-radius:.5rem;padding:.4rem .8rem;margin-left:auto;cursor:pointer}
+header a{margin-left:0}
+body.laufen .kopfknopf{background:#fff}
+#meldung{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(20,26,32,.82);color:#fff;padding:.45rem .9rem;border-radius:.5rem;font-size:.9rem;z-index:4;max-width:90%;text-align:center}
+#fadenkreuz{display:none;position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none;z-index:3;
+  background:linear-gradient(#fff,#fff) center/2px 100% no-repeat,linear-gradient(#fff,#fff) center/100% 2px no-repeat;mix-blend-mode:difference}
+body.laufen #fadenkreuz{display:block}
+body.laufen #ebenen,body.laufen #hilfe{display:none}
+#touchUI{display:none}
+@media (pointer:coarse){
+  body.laufen #touchUI{display:block}
+  #stick{position:absolute;left:22px;bottom:calc(26px + env(safe-area-inset-bottom,0px));width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);touch-action:none;z-index:4}
+  #stick i{position:absolute;left:38px;top:38px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.75)}
+  .tknoepfe{position:absolute;right:16px;bottom:calc(22px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:1fr 1fr;gap:8px;z-index:4}
+  .tknoepfe button{font:inherit;font-weight:700;min-width:96px;min-height:52px;border:0;border-radius:.6rem;background:rgba(20,26,32,.7);color:#fff;touch-action:none}
+  .tknoepfe button[aria-pressed=true]{background:var(--blau)}
+}
+.knoepfe{margin-top:.6rem!important}
+#bauBtn{font:inherit;font-weight:700;background:var(--blau);color:#fff;border:0;border-radius:.5rem;padding:.45rem .9rem;cursor:pointer}
+dialog#bau{width:min(1100px,96vw);max-height:92dvh;border:1px solid var(--linie);border-radius:.8rem;padding:0;background:var(--flaeche);color:var(--text)}
+dialog#bau::backdrop{background:rgba(10,15,20,.35)}
+.bau-kopf{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;border-bottom:1px solid var(--linie)}
+.bau-kopf h2{margin:0;font-size:1.05rem}
+.bau-kopf button,.bau-steuer button{font:inherit;background:var(--grund);color:var(--text);border:1px solid var(--linie);border-radius:.4rem;min-width:40px;min-height:40px;cursor:pointer}
+.bau-steuer{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;flex-wrap:wrap}
+.bau-steuer input{flex:1;min-width:140px}
+#bauEbene{font-weight:600;font-size:.9rem}
+.bau-inhalt{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:1rem;padding:0 1rem 1rem;max-height:calc(92dvh - 130px);overflow:auto}
+.bau-plan{overflow:auto}
+#bauCv{display:block;image-rendering:pixelated;border:1px solid var(--linie)}
+.bau-listen h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--leise);margin:.4rem 0}
+.bau-listen ul{list-style:none;margin:0 0 .8rem;padding:0;font-size:.88rem}
+.bau-listen li{display:flex;align-items:center;gap:.5rem;padding:.2rem 0}
+.bau-listen li b{margin-left:auto}
+.kachel{width:20px;height:20px;flex:none;background-image:var(--atlas);background-size:var(--atlasW) auto;image-rendering:pixelated;border:1px solid rgba(0,0,0,.2)}
+@media (max-width:800px){
+  .bau-inhalt{grid-template-columns:1fr}
+  body{grid-template-columns:1fr}
+  #panelBtn{display:inline-block}
+  header a{display:none}
+  aside{position:fixed;left:0;right:0;bottom:0;height:62dvh;border-left:0;border-top:1px solid var(--linie);border-radius:14px 14px 0 0;transform:translateY(100%);transition:transform .25s;z-index:10;padding-bottom:env(safe-area-inset-bottom,0px)}
+  body.panel-offen aside{transform:none}
+  #ebenen{flex-direction:row;flex-wrap:nowrap;right:10px;overflow-x:auto;scrollbar-width:none}
+  #ebenen button{flex:none}
+  #ebenen button{min-height:40px}
+  #hilfe{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bergstadt &amp; Stargate Command</h1>
+  <button type="button" id="laufBtn" class="kopfknopf">Begehen</button>
+  <button type="button" id="panelBtn" aria-controls="panel">Orte</button>
+  <a href="https://rutoso.de">rutoso.de</a>
+</header>
+<main id="bühne">
+  <canvas id="cv" aria-label="3D-Ansicht der Bergstadt"></canvas>
+  <nav id="ebenen" aria-label="Ebenen"></nav>
+  <div id="lade" role="status">Lade …</div>
+  <div id="meldung" role="status" hidden></div>
+  <div id="fadenkreuz" aria-hidden="true"></div>
+  <div id="touchUI">
+    <div id="stick" aria-label="Laufen"><i></i></div>
+    <div class="tknoepfe">
+      <button type="button" id="tNutz">Benutzen</button>
+      <button type="button" id="tSpring">Springen</button>
+      <button type="button" id="tFlieg" aria-pressed="false">Fliegen</button>
+      <button type="button" id="tEnde">Beenden</button>
+    </div>
+  </div>
+  <div id="hilfe">Ziehen: drehen · Rechts/Umschalt: schieben · Rad: zoomen · Klick: Block ansehen bzw. Schalter benutzen</div>
+</main>
+<aside id="panel">
+  <div id="info"><h2>Willkommen</h2><p>Eine Bergstadt mit Burg, Markt und Krater – und tief im Fels ein Stargate Command über mehrere Ebenen. Wähle einen Ort aus der Liste oder eine Ebene links oben. Mit „Begehen“ läufst du selbst durch die Welt; Türen, Lampen und das Tor lassen sich schalten.</p></div>
+  <div id="suchzeile"><input id="suche" type="search" placeholder="Ort suchen …" aria-label="Ort suchen"></div>
+  <div id="orte"></div>
+  <footer>Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden. Alle Texturen sind eigene Nachbildungen. · <a href="https://rutoso.de">rutoso.de</a></footer>
+</aside>
+<dialog id="bau" aria-labelledby="bauTitel">
+  <div class="bau-kopf"><h2 id="bauTitel">Bauanleitung</h2><button type="button" id="bauZu" aria-label="Schließen">✕</button></div>
+  <div class="bau-steuer">
+    <button type="button" id="bauZur" aria-label="Ebene tiefer">◀</button>
+    <input type="range" id="bauY" min="0" max="0" value="0" aria-label="Ebene wählen">
+    <button type="button" id="bauVor" aria-label="Ebene höher">▶</button>
+    <span id="bauEbene"></span>
+  </div>
+  <div class="bau-inhalt">
+    <div class="bau-plan"><canvas id="bauCv"></canvas><p class="leise">Draufsicht, Norden oben. Blass: die Ebene darunter.</p></div>
+    <div class="bau-listen"><h3>Diese Ebene</h3><ul id="bauLay"></ul><h3>Gesamt</h3><ul id="bauTot"></ul></div>
+  </div>
+</dialog>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/texturen.js"></script>
+<script src="js/mesh.js"></script>
+<script src="js/welt.js"></script>
+</body>
+</html>
