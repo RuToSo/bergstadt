@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verlaufen? – Bergstadt</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="https://rutoso.de/favicon.ico" sizes="any">
+<style>
+:root{--grund:#eef1f3;--flaeche:#f8fafb;--text:#17222b;--leise:#566570;--linie:#c9d2d8;--blau:#1C5DA6;--gelb:#F5C330;color-scheme:light;
+  font-family:"Segoe UI",system-ui,Roboto,Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root{--grund:#11181d;--flaeche:#162027;--text:#e3e9ed;--leise:#93a4af;--linie:#2a3943;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--grund);color:var(--text);line-height:1.5}
+header{display:flex;align-items:center;gap:.8rem;padding:.55rem 1rem;background:var(--blau);color:#fff;border-bottom:4px solid var(--gelb)}
+header h1{margin:0;font-size:1.05rem;font-weight:700}
+main{max-width:46rem;margin:0 auto;padding:1.5rem 1rem 2.5rem}
+h2{margin:0 0 .3rem;font-size:1.5rem}
+.leise{color:var(--leise)}
+a{color:var(--blau)}
+@media (prefers-color-scheme:dark){a{color:#7DB8E8}}
+.knopf{display:inline-block;font:inherit;font-weight:700;background:var(--gelb);color:#17222b;border:0;border-radius:.5rem;padding:.55rem 1rem;text-decoration:none;cursor:pointer}
+.knopf.zweit{background:none;color:inherit;text-decoration:underline;font-weight:600}
+.stollen{position:relative;margin-top:1.25rem}
+#cv{display:block;width:100%;height:auto;border-radius:.6rem;background:#0d0b09;touch-action:none}
+.anzeige{display:flex;justify-content:space-between;gap:1rem;margin-top:.5rem;font-size:.88rem;color:var(--leise)}
+.schicht{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:1rem;border-radius:.6rem;background:rgba(13,11,9,.78);color:#fff}
+.schicht[hidden]{display:none}
+.schicht h3{margin:0 0 .4rem;font-size:1.3rem;color:var(--gelb)}
+.schicht p{margin:0 0 1rem}
+.schicht .reihe{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap}
+.pad{display:grid;grid-template-columns:repeat(3,3.2rem);grid-template-rows:repeat(2,3.2rem);gap:.35rem;justify-content:center;margin-top:.9rem}
+.pad button{font:inherit;font-size:1.3rem;font-weight:700;background:var(--flaeche);color:var(--text);border:1px solid var(--linie);border-radius:.5rem;cursor:pointer;touch-action:manipulation}
+.pad .hoch{grid-column:2}.pad .links{grid-column:1;grid-row:2}.pad .runter{grid-column:2;grid-row:2}.pad .rechts{grid-column:3;grid-row:2}
+@media (hover:hover) and (pointer:fine){.pad{display:none}}
+:focus-visible{outline:2px solid var(--gelb);outline-offset:2px}
+footer{max-width:46rem;margin:0 auto;padding:.8rem 1rem 1.5rem;font-size:.8rem;color:var(--leise);display:flex;gap:1rem;flex-wrap:wrap;border-top:1px solid var(--linie)}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<header><h1>Bergstadt</h1></header>
+<main>
+  <h2>Hier geht's nicht weiter.</h2>
+  <p class="leise">Diesen Gang gibt es nicht. <a href="/">Zurück zur Bergstadt →</a></p>
+  <p>Oder du suchst dir selbst den Weg: Du stehst mit deiner Grubenlampe tief im Stollen. Irgendwo leuchtet der Ausgang.</p>
+
+  <div class="stollen">
+    <canvas id="cv" width="600" height="440" aria-label="Labyrinth. Mit den Pfeiltasten oder durch Wischen bewegen."></canvas>
+    <div class="schicht" id="start">
+      <div><h3>Im Stollen verlaufen</h3><p>Pfeiltasten, WASD oder wischen.</p>
+      <div class="reihe"><button type="button" class="knopf" id="los">Lampe an</button></div></div>
+    </div>
+    <div class="schicht" id="ende" hidden>
+      <div><h3>Licht!</h3><p id="ende-text"></p>
+      <div class="reihe"><a class="knopf" href="/">Zurück zur Bergstadt →</a><button type="button" class="knopf zweit" id="neu">Neuer Stollen</button></div></div>
+    </div>
+  </div>
+  <div class="anzeige"><span id="schritte">Schritte: 0</span><span>Ziel: das Licht unten rechts</span></div>
+  <div class="pad" aria-label="Steuerung">
+    <button type="button" class="hoch" data-r="0,-1" aria-label="Hoch">↑</button>
+    <button type="button" class="links" data-r="-1,0" aria-label="Links">←</button>
+    <button type="button" class="runter" data-r="0,1" aria-label="Runter">↓</button>
+    <button type="button" class="rechts" data-r="1,0" aria-label="Rechts">→</button>
+  </div>
+</main>
+<footer>
+  <a href="https://rutoso.de">rutoso.de</a>
+  <a href="https://apps.rutoso.de/impressum.html">Impressum</a>
+  <a href="https://apps.rutoso.de/datenschutz.html">Datenschutz</a>
+</footer>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),g=cv.getContext('2d');
+  var SP=15,ZE=11,Z=40;                       // Spalten, Zeilen, Zellgröße in Pixeln
+  cv.width=SP*Z;cv.height=ZE*Z;
+  var waende,besucht,spieler,schritte,laeuft=false;
+  var $=function(id){return document.getElementById(id)};
+
+  // Labyrinth erzeugen (Tiefensuche): waende[y][x] = {n,o,s,w}
+  function erzeugen(){
+    waende=[];besucht=[];
+    for(var y=0;y<ZE;y++){waende.push([]);besucht.push([]);for(var x=0;x<SP;x++){waende[y].push({n:1,o:1,s:1,w:1});besucht[y].push(false)}}
+    var gesehen=besucht.map(function(r){return r.map(function(){return false})}),stapel=[[0,0]];gesehen[0][0]=true;
+    var R=[[0,-1,'n','s'],[1,0,'o','w'],[0,1,'s','n'],[-1,0,'w','o']];
+    while(stapel.length){
+      var c=stapel[stapel.length-1],nb=R.filter(function(r){var nx=c[0]+r[0],ny=c[1]+r[1];return nx>=0&&ny>=0&&nx<SP&&ny<ZE&&!gesehen[ny][nx]});
+      if(!nb.length){stapel.pop();continue}
+      var r=nb[Math.floor(Math.random()*nb.length)],nx=c[0]+r[0],ny=c[1]+r[1];
+      waende[c[1]][c[0]][r[2]]=0;waende[ny][nx][r[3]]=0;gesehen[ny][nx]=true;stapel.push([nx,ny]);
+    }
+  }
+
+  function neu(){
+    erzeugen();spieler={x:0,y:0};schritte=0;besucht[0][0]=true;laeuft=true;
+    $('start').hidden=true;$('ende').hidden=true;$('schritte').textContent='Schritte: 0';
+    zeichnen();cv.focus&&cv.setAttribute('tabindex','0');cv.focus();
+  }
+
+  function gehen(dx,dy){
+    if(!laeuft)return;
+    var w=waende[spieler.y][spieler.x];
+    if((dx===1&&w.o)||(dx===-1&&w.w)||(dy===1&&w.s)||(dy===-1&&w.n))return;
+    spieler.x+=dx;spieler.y+=dy;besucht[spieler.y][spieler.x]=true;schritte++;
+    $('schritte').textContent='Schritte: '+schritte;
+    zeichnen();
+    if(spieler.x===SP-1&&spieler.y===ZE-1){laeuft=false;$('ende-text').textContent='Du hast den Ausgang nach '+schritte+' Schritten gefunden.';$('ende').hidden=false;$('ende').querySelector('a').focus()}
+  }
+
+  function zeichnen(){
+    var W=cv.width,H=cv.height;
+    g.fillStyle='#3b322a';g.fillRect(0,0,W,H);                       // Fels
+    for(var y=0;y<ZE;y++)for(var x=0;x<SP;x++){                       // Gänge
+      g.fillStyle=(x+y)%2?'#8a7865':'#857361';
+      var w=waende[y][x],px=x*Z,py=y*Z,r=6;
+      g.fillRect(px+r,py+r,Z-2*r,Z-2*r);
+      if(!w.o)g.fillRect(px+Z-r,py+r,2*r,Z-2*r);
+      if(!w.s)g.fillRect(px+r,py+Z-r,Z-2*r,2*r);
+    }
+    // Ausgang
+    var ax=(SP-1)*Z+Z/2,ay=(ZE-1)*Z+Z/2;
+    // Dunkelheit: nah an der Lampe hell, schon gesehene Gänge schwach erkennbar
+    for(y=0;y<ZE;y++)for(x=0;x<SP;x++){
+      var d=Math.hypot(x-spieler.x,y-spieler.y),a=Math.min(1,Math.max(0,(d-1.2)/1.6));
+      a*=besucht[y][x]?.6:.985;
+      if(a>0){g.fillStyle='rgba(13,11,9,'+a+')';g.fillRect(x*Z,y*Z,Z,Z)}
+    }
+    // Licht am Ende des Stollens, immer sichtbar
+    var gl=g.createRadialGradient(ax,ay,2,ax,ay,Z*1.4);gl.addColorStop(0,'rgba(245,195,48,.95)');gl.addColorStop(.35,'rgba(245,195,48,.45)');gl.addColorStop(1,'rgba(245,195,48,0)');
+    g.fillStyle=gl;g.fillRect(ax-Z*1.5,ay-Z*1.5,Z*3,Z*3);
+    // Spieler mit Grubenlampe
+    var sx=spieler.x*Z+Z/2,sy=spieler.y*Z+Z/2;
+    var lg=g.createRadialGradient(sx,sy,2,sx,sy,Z*2.2);lg.addColorStop(0,'rgba(255,230,160,.35)');lg.addColorStop(1,'rgba(255,230,160,0)');
+    g.fillStyle=lg;g.fillRect(sx-Z*2.2,sy-Z*2.2,Z*4.4,Z*4.4);
+    g.beginPath();g.arc(sx,sy+3,Z*.26,0,7);g.fillStyle='#1C5DA6';g.fill();          // Körper
+    g.beginPath();g.arc(sx,sy-4,Z*.2,Math.PI,0);g.fillStyle='#F5C330';g.fill();     // Helm
+    g.beginPath();g.arc(sx,sy-8,3,0,7);g.fillStyle='#fff';g.fill();                // Lampe
+  }
+
+  addEventListener('keydown',function(e){
+    if(!laeuft)return;
+    var k=e.key.length===1?e.key.toLowerCase():e.key,m={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]}[k];
+    if(m){e.preventDefault();gehen(m[0],m[1])}
+  });
+  var sx0,sy0;
+  cv.addEventListener('pointerdown',function(e){sx0=e.clientX;sy0=e.clientY});
+  cv.addEventListener('pointerup',function(e){
+    if(sx0==null)return;var dx=e.clientX-sx0,dy=e.clientY-sy0;sx0=null;
+    if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;
+    if(Math.abs(dx)>Math.abs(dy))gehen(dx>0?1:-1,0);else gehen(0,dy>0?1:-1);
+  });
+  document.querySelectorAll('.pad button').forEach(function(b){b.addEventListener('click',function(){var r=b.dataset.r.split(',');gehen(+r[0],+r[1])})});
+  $('los').addEventListener('click',neu);$('neu').addEventListener('click',neu);
+
+  erzeugen();spieler={x:0,y:0};besucht[0][0]=true;zeichnen();
+})();
+</script>
+</body></html>
